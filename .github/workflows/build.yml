@@ -82,5 +82,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: UEFI-Build-Artifacts
-          path: Build/*Pkg/*.img
+          path: Build/*Pkg/*
           if-no-files-found: warn
