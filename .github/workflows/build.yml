@@ -1,0 +1,86 @@
+name: Build UEFI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      device:
+        description: 'Target Device (e.g. oneplus-dumpling, xiaomi-nabu, etc.)'
+        required: true
+        default: 'xiaomi-nabu'
+      build_type:
+        description: 'Build Type (RELEASE or DEBUG)'
+        required: true
+        default: 'RELEASE'
+        type: choice
+        options:
+          - RELEASE
+          - DEBUG
+      secure_boot:
+        description: 'Secure Boot Status (0 for off, 1 for on)'
+        required: true
+        default: '0'
+        type: choice
+        options:
+          - '0'
+          - '1'
+
+jobs:
+  build:
+    name: Build UEFI for ${{ github.event.inputs.device || 'all platforms' }}
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          repository: alghiffaryfa19/mu_aloha_platforms
+          submodules: false # Stuart handles submodules
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mono-devel git build-essential llvm clang gcc-aarch64-linux-gnu
+
+      - name: Set Environment Variables
+        run: |
+          # Use default /usr/bin/ for LLVM binaries installed via apt
+          echo "CLANGPDB_BIN=/usr/bin/" >> $GITHUB_ENV
+          echo "CLANGPDB_AARCH64_PREFIX=aarch64-linux-gnu-" >> $GITHUB_ENV
+
+      - name: Install Python Requirements
+        run: |
+          pip install --upgrade -r pip-requirements.txt
+
+      - name: Setup Base Environment
+        run: |
+          chmod +x ./build_setup.sh
+          ./build_setup.sh
+
+      - name: Initialize UEFI Build
+        run: |
+          python3 ./build_uefi.py --init
+
+      - name: Build UEFI
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            python3 ./build_uefi.py -d ${{ github.event.inputs.device }} -s ${{ github.event.inputs.secure_boot }} -t ${{ github.event.inputs.build_type }}
+          else
+            # Default action on push/PR: Build all platforms
+            python3 ./build_uefi.py -p all
+          fi
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: UEFI-Build-Artifacts
+          path: Build/*Pkg/*.img
+          if-no-files-found: warn
